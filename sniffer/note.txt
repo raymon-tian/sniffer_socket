@@ -1,0 +1,5 @@
+1.每当主机收到一个以太网帧，硬件（网卡）会检查是否属于自己。
+2.char *pcap_lookupdev(char *errbuf)//获取可用于数据包捕获的网络设备的名称，可以用 ifconfig 查看
+3.错误字符串buffer PCAP_ERRBUF_SIZE
+4.the function int pcap_datalink(pcap_t *p) returns the link layer type of the device opened by pcap_open_live()
+5.
