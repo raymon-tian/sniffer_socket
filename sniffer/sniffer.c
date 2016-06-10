@@ -87,14 +87,15 @@ void parse_packet(u_char *user,struct pcap_pkthdr *packetthdr,u_char *packetptr)
                (tcphdr->syn ? 'S' : '*'),
                (tcphdr->fin ? 'F' : '*'),
                ntohl(tcphdr->seq), ntohl(tcphdr->ack_seq),
-               ntohs(tcphdr->window), 4*tcphdr->doff);
-			
+               ntohs(tcphdr->window), 4*tcphdr->doff);	
+			packetptr += 4*tcphdr->doff;
 			break;
 		//UDP协议
 		case IPPROTO_UDP:
 			udphdr = (struct udphdr*)packetptr;
 			printf("UDP  %s:%d -> %s:%d\n", src_ip, ntohs(udphdr->source),des_ip, ntohs(udphdr->dest));
 			printf("%s\n",iphdr_info);
+			packetptr += 8;
 			break;
 		//ICMP协议
 		case IPPROTO_ICMP:
@@ -104,8 +105,11 @@ void parse_packet(u_char *user,struct pcap_pkthdr *packetthdr,u_char *packetptr)
 			memcpy(&id,(u_char*)icmphdr+4,2);
 			memcpy(&id,(u_char*)icmphdr+6,2);
 			printf("Type:%d Code:%d ID:%d Seq:%d\n",icmphdr->type,icmphdr->code,ntohs(id),ntohs(seq));
+			packetptr += 8;
 			break;
 	}
+	//剥离传输层首部，解析应用层协议
+	printf("%s\n",packetptr);
     printf(
         "+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+\n\n");
 }

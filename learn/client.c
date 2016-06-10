@@ -24,7 +24,7 @@ int main(int argc,char *argv[]){
 	saddr.sin_family = AF_INET;
 	//设置server ip
 	//inet_pton(AF_INET,"127.0.0.1",&saddr.sin_addr.s_addr);
-	saddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+	saddr.sin_addr.s_addr = inet_addr("10.11.166.206");
 	//设置server port
 	saddr.sin_port = htons(8001);
 	
