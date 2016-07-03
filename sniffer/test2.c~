@@ -1,0 +1,520 @@
+/* NWEN302 LAB 1
+ * Name: Adam Bates
+ * Usercode: batesadam
+ * Student ID: 300223031
+ */
+
+// Libraries/Header Files to include
+#include </usr/include/netinet/ip.h>
+#include </usr/include/netinet/ip6.h>
+#include </usr/include/pcap/pcap.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netinet/if_ether.h>
+#include <net/ethernet.h>
+#include <netinet/ether.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <netinet/ip_icmp.h>
+#include <netinet/icmp6.h>
+#include <stdbool.h>
+#include <string.h>
+
+/* Function Prototypes */
+void packetHandler(u_char *, const struct pcap_pkthdr*, const u_char*);
+void IPV6_HANDLER(int, int, const u_char*, char*);
+void Handle_TCP (const u_char*, int*);
+void Handle_UDP (const u_char*, int*);
+void PrintData (const u_char *, int Size);
+void Handle_ARP(const u_char*, int*);
+void printIPV4header(char*, char*);
+void Handle_ICMPV6(const u_char*, int*);
+void printIPV6Header();
+
+
+
+
+/* Global Variables */ 
+int packet_counter = 0, p = 0;
+bool ARP_bool = false, IPV4_bool = false, IPV6_bool =false, ICMP_bool = false; 
+bool TCP_bool = false; UDP_bool = false; UNKNOWN_bool = false; UNKNWONPROTO_bool = false;
+
+/* Declear IPv6 Source and Destination Address Variables */
+char sourceIp6[INET6_ADDRSTRLEN];
+char destIp6[INET6_ADDRSTRLEN];
+
+int main(int argc, char *argv[]) {
+
+	/* Filename of PCAP file as the first argument of the program
+		if it is not included then inform the user and terminate program */
+	if(argc == 1){
+		printf("Please include pcap file as first argument\n");
+		return;
+	}
+
+	const char* filename = argv[1];  
+
+	int i;
+	for(i=2; i < argc; i++){
+		if(strcasecmp("ARP", argv[i]) == 0)   // strcasecmp ignores case when comparing strings
+			ARP_bool = true;
+		else if(strcasecmp("TCP", argv[i]) == 0)
+			TCP_bool = true;
+		else if(strcasecmp("UDP", argv[i]) == 0)
+			UDP_bool = true;
+		else if(strcasecmp("IPV4", argv[i]) == 0)
+			IPV4_bool = true;		
+		else if(strcasecmp("IPV6", argv[i]) == 0)
+			IPV6_bool = true;
+		else if(strcasecmp("ICMP", argv[i]) == 0)
+			ICMP_bool = true;
+		else if(strcasecmp("UNKNOWN", argv[i]) == 0)
+			UNKNOWN_bool = true;
+	}
+
+	if(argc == 2){	/* If there are no filters then enable all */
+		ARP_bool = true; IPV4_bool = true; IPV6_bool = true; UNKNOWN_bool = true; 
+	}
+
+	if((IPV4_bool == true || IPV6_bool == true) && TCP_bool == false && UDP_bool == false && ICMP_bool == false && UNKNWONPROTO_bool == false){
+		TCP_bool = true; UDP_bool = true; ICMP_bool = true; UNKNWONPROTO_bool = true;
+	}
+
+	// Select a protocol filter
+	char errbuf[PCAP_ERRBUF_SIZE];
+
+	// Open capture file
+	pcap_t *descr;
+	descr = pcap_open_offline(filename, errbuf);
+	if(descr == NULL){
+		printf("Name of file was: %s\n", filename);
+		printf("Error, : %s\n", errbuf);
+	}
+
+	// start packet processing loop, just like live capture
+	if (pcap_loop(descr, 0, packetHandler, NULL) < 0) {
+		//cout << "pcap_loop() failed: " << pcap_geterr(descr);
+		printf("pcap_loop() failed\n");
+		return 1;
+	}
+	else{
+		printf("Loop not failed\n");
+	}
+
+	return 1;
+}
+
+void packetHandler(u_char *userData, const struct pcap_pkthdr* pkthdr, const u_char* packet) {
+
+	/* Link Layer - Declear Ethernet Header */
+	const struct ether_header* ethernet_header;
+	
+	/* Declear IPv4 Headers */
+	const struct ip* ip_header;
+	const struct udphdr* udp_header;
+	const struct icmphdr* icmp_header;
+	
+	/* Declear Source and Destination IPv4 Address Variables */
+	char sourceIp[INET_ADDRSTRLEN];
+	char destIp[INET_ADDRSTRLEN];
+	
+	/* Declear IPv6 Headers */
+	const struct ip6_hdr* ip6_header;
+	  	
+	p = pkthdr->len;
+
+	packet_counter++;  // Increment the packet counter
+	
+	/* Initialise Ethernet Structure */
+	ethernet_header = (struct ether_header*)packet;
+
+	int size = 0;
+	size+=sizeof(struct ether_header);
+
+	switch(ntohs(ethernet_header->ether_type)){
+	case ETHERTYPE_IP:   // IPV4 Header
+
+		if(IPV4_bool == false) return;
+
+		ip_header = (struct ip*)(packet + size);
+		inet_ntop(AF_INET, &(ip_header->ip_src), sourceIp, INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &(ip_header->ip_dst), destIp, INET_ADDRSTRLEN);
+
+		size+=sizeof(struct ip);
+
+		u_char *data;
+		int dataLength = 0;
+
+		switch(ip_header->ip_p){
+		case IPPROTO_TCP:  // Transmission Control Protocol (TCP) 
+			if(TCP_bool == false) return;
+			printIPV4header(sourceIp, destIp);
+			Handle_TCP(packet, &size);
+			break;
+		case IPPROTO_UDP:
+			if(UDP_bool == false) return;
+			printIPV4header(sourceIp, destIp);
+			Handle_UDP(packet, &size);
+		  break;
+		case IPPROTO_ICMP:  // Internet Control essgae Protocol (ICMP)
+		  		  
+		  if(ICMP_bool == false) return;
+		  printIPV4header(sourceIp, destIp);
+		  printf(" Protocol: ICMP\n");
+  
+		  icmp_header = (struct icmphdr*)(packet + sizeof(struct ether_header) + sizeof(struct ip));
+  
+		  u_int type = icmp_header->type;
+  
+		  if(type == 11){
+		    printf(" TTL Expired\n");
+		  }
+		  else if(type == ICMP_ECHOREPLY){
+   			printf(" ICMP Echo Reply\n");
+		  }
+		  
+		  data = (u_char*)(packet + sizeof(struct ether_header) + sizeof(struct ip) + sizeof(struct icmphdr));
+		  dataLength = pkthdr->len - (sizeof(struct ether_header) + sizeof(struct ip) + sizeof(struct icmphdr)); 
+
+		  printf(" Code: %d\n", (unsigned int)(icmp_header->code));
+		  printf(" Checksum: %d\n", ntohs(icmp_header->checksum));
+		  printf(" Payload(%d bytes):\n", dataLength);
+		  
+		  PrintData(data, dataLength);
+
+		  break;
+		default: // Unknown IPV4 Protocol
+			if(UNKNWONPROTO_bool == false) return;
+			   printf(" Protocol: Unknown\n");
+			break;
+		}
+		break;
+		case ETHERTYPE_IPV6:  // IPV6 
+
+			if(IPV6_bool == false) return;
+
+			ip6_header = (struct ip6_hdr*)(packet + size); 
+
+			inet_ntop(AF_INET6, &(ip6_header->ip6_src), sourceIp6, INET6_ADDRSTRLEN);
+			inet_ntop(AF_INET6, &(ip6_header->ip6_dst), destIp6, INET6_ADDRSTRLEN);
+
+			int nexthdr = ip6_header->ip6_nxt;
+
+			size+=sizeof(struct ip6_hdr);
+
+			char string[100] = " ";
+
+			IPV6_HANDLER(nexthdr, size, packet, string);
+
+			break;
+		case ETHERTYPE_ARP:   // ARP
+			if(ARP_bool == false) return;
+			Handle_ARP(packet, &size);
+			break;
+		default:
+			if(UNKNOWN_bool == false) return;
+			printf(" ETHER_TYPE: Unknown\n");
+			break;
+	}
+
+}
+
+
+/* Handle IPV6 Headers */
+void IPV6_HANDLER(int hrd, int size, const u_char* packet, char* string){
+
+	switch(hrd){
+	case IPPROTO_ROUTING:  /* Routing Header */
+		strcat(string, "ROUTING, ");
+		struct ip6_rthdr* header = (struct ip6_rthdr*)(packet + size); 
+		size+=sizeof(struct ip6_rthdr);
+		IPV6_HANDLER(header->ip6r_nxt, size, packet, string);
+		break;
+	case IPPROTO_HOPOPTS:  /* Hop-by-Hop options */
+		strcat(string, "HOP-BY_HOP, ");
+		struct ip6_hbh* header_hop = (struct ip6_hbh*)(packet + size); 
+		size+=sizeof(struct ip6_hbh);
+		IPV6_HANDLER(header_hop->ip6h_nxt, size, packet, string);
+		break;
+	case IPPROTO_FRAGMENT: /* Fragmentation header(FRAGMENT) */
+		strcat(string, "FRAGMENTATION, ");
+		struct ip6_frag* header_frag = (struct ip6_frag*)(packet + size); 
+		size+=sizeof(struct ip6_frag);
+		IPV6_HANDLER(header_frag->ip6f_nxt, size, packet, string);
+		break;
+	case IPPROTO_DSTOPTS:  /* Destination options(DSTOPTS) */
+		strcat(string, "Destination options, ");
+		struct ip6_dest* header_dest = (struct ip6_dest*)(packet + size); 
+		size+=sizeof(struct ip6_dest);
+		IPV6_HANDLER(header_dest->ip6d_nxt, size, packet, string);
+		break;
+	case IPPROTO_TCP:      /* TCP PROTOCOL */
+		if(TCP_bool == false) return;
+		printIPV6Header();
+		printf("%s\n", string);
+		Handle_TCP (packet, &size);
+		break;
+	case IPPROTO_UDP:      /* UDP PROTOCOL */
+		if(UDP_bool == false) return;
+		printIPV6Header();
+		printf("%s\n", string);
+		Handle_UDP (packet, &size);
+		break;
+	case IPPROTO_ICMPV6:     /* ICMP6*/
+		if(ICMP_bool == false) return;
+		printIPV6Header();
+		printf("%s\n", string);
+		Handle_ICMPV6(packet, &size);
+		break;
+	default:
+		if(UNKNWONPROTO_bool == false) return;
+		printIPV6Header();
+		printf("Unknown header(%d),", hrd);  /* Unknown Header */
+		break;
+	} 
+}
+
+void printIPV6Header(){
+			printf("\n******************************************************************************\n");
+			printf("Packet Number: %d\n IP_Version: IPV6\n	Source IP: %s\n	Destination IP: %s\n Extension Headers:",packet_counter, sourceIp6, destIp6);
+}
+
+void Handle_ICMPV6(const u_char* packet, int* size){
+		printf("\n");
+		printf(" Protocol: ICMP\n");
+		u_char *data;
+		int dataLength = 0;
+
+		struct icmp6_hdr* header_icmp6 = (struct icmp6_hdr*)(packet+*size);
+
+		data = (u_char*)(packet + *size + sizeof(struct icmp6_hdr));
+	  	dataLength = p - *size + sizeof(struct icmp6_hdr); 
+
+	  	printf(" Payload(%d bytes):\n", dataLength);
+
+		PrintData(data, dataLength);
+}
+
+/* Handle ARP Headers */
+void Handle_ARP(const u_char* packet, int* size){
+	
+	const struct ether_arp* arp_header;
+	arp_header = (struct ether_arp*)(packet+*size);
+
+	printf("\n******************************************************************************\n");
+	printf("Packet Number: %d\n", packet_counter);
+
+	/* Determine the ARP Operation Type */
+	printf("ARP Operation: ");
+	switch(ntohs(arp_header->arp_op)){
+		case ARPOP_REQUEST:
+			printf("ARP Request");
+			break;
+		case ARPOP_REPLY:
+			printf("ARP Reply");
+			break;
+		case ARPOP_RREQUEST:
+			printf("RARP Request");
+			break;
+		case ARPOP_RREPLY:
+			printf("RARP RARP Reply");
+			break;
+		case ARPOP_InREQUEST:
+			printf("InARP Request");
+			break;
+		case ARPOP_InREPLY:
+			printf("InARP Request");
+			break;
+		case ARPOP_NAK:
+			printf("(ATM)ARP NAK");
+			break;
+		default:
+			printf("Unknown");
+			break;
+	}
+
+	char sourceIp[INET_ADDRSTRLEN];
+	char destIp[INET_ADDRSTRLEN];
+
+	/* Determine the protocol hardware identifier */
+	printf("\nProtocol Hardware Identifier: ");
+	switch(ntohs(arp_header->arp_hrd)){
+		case ARPHRD_NETROM:
+			printf("From KA9Q: NET/ROM pseudo");
+			break;
+		case ARPHRD_IEEE1394:
+			printf("IEEE 1394 IPv4 - RFC 2734");
+			break;
+		case ARPHRD_SLIP:
+			printf("Serial Line Internet Protocol(SLIP)");
+			break;
+		case ARPHRD_ETHER:
+			printf("Ethernet 10/100Mbps.");
+
+			/* Determine the Protocol Type */
+			printf("\nProtocol: ");
+			int i;
+			switch(ntohs(arp_header->arp_pro)){
+				case ETHERTYPE_IP:
+					printf("IPv4\n");
+
+				    printf("Sender MAC: "); 
+
+    				for(i=0; i<6;i++)
+        				printf("%02X:", arp_header->arp_sha[i]); 
+
+    				printf("\nSender IP: "); 
+
+    				 inet_ntop(AF_INET, &(arp_header->arp_spa), sourceIp, INET_ADDRSTRLEN);
+    				 printf("%s", sourceIp);
+
+    				printf("\nDestination MAC: "); 
+
+    				for(i=0; i<6;i++)
+        				printf("%02X:", arp_header->arp_tha[i]); 
+
+    				printf("\nDestination IP: "); 
+    				
+    				 inet_ntop(AF_INET, &(arp_header->arp_tpa), destIp, INET_ADDRSTRLEN);
+    				 printf("%s", destIp);
+    
+    				printf("\n"); 
+
+				break;
+			default:
+				printf("Unknown");
+				break;
+			}
+			break;
+		case ARPHRD_APPLETLK:
+			printf("APPLEtalk");
+			break;
+		case ARPHRD_IEEE802:
+			printf("IEEE 802.2 Ethernet/TR/TB");
+			break;           
+		default:
+			printf("Unknown");
+			break;
+	}
+}
+
+/* Function to handle TCP Headers */
+void Handle_TCP (const u_char* packet, int* size){
+			
+			/* Initialise TCP header structure */      
+			const struct tcphdr* tcp_header;
+			u_int sourcePort, destPort;
+			u_char *data;
+
+			tcp_header = (struct tcphdr*)(packet + *size);
+			int dataLength = 0;
+
+			/* Get the source and destination ports from the TCP header */
+			sourcePort = ntohs(tcp_header->source);
+			destPort = ntohs(tcp_header->dest);
+
+			/* Initialise the data pointer to point to the data carryed by the TCP and Initialise dataLength to the length of the data */
+			*size+=tcp_header->doff*4;
+			data = (u_char*)(packet + *size);
+			dataLength = p - *size;
+
+			/* Print the TCP header infomation and payload */
+			printf(" Protocol: TCP\n	Source Port: %d\n	Destination Port: %d\n Checksum: %d\n Payload(%d bytes):\n", 
+					sourcePort, destPort, ntohs(tcp_header->check), dataLength);
+
+			/* Print the packet contents */
+			PrintData (data , dataLength);
+}
+
+
+/* Function to handle UDP Headers */
+void Handle_UDP (const u_char* packet, int* size){
+			
+			/* Initialise UDP header structure */      
+			const struct udphdr* udp_header;
+			u_int sourcePort, destPort;
+			u_char *data;
+
+			udp_header = (struct udphdr*)(packet + *size);
+			int dataLength = 0;
+
+			/* Get the source and destination ports from the UDP header */
+			sourcePort = ntohs(udp_header->source);
+			destPort = ntohs(udp_header->dest);
+
+			/* Initialise the data pointer to point to the data carryed by the UDP and Initialise dataLength to the length of the data */
+			*size+=sizeof(struct udphdr);
+			data = (u_char*)(packet + *size);
+			dataLength = p - *size;
+
+			/* Print the TCP header infomation and payload */
+			printf(" Protocol: UDP\n	Source Port: %d\n	Destination Port: %d\n Payload(%d bytes):\n", 
+					sourcePort, destPort, dataLength);
+
+			/* Print the packet contents */
+			PrintData (data , dataLength);
+}
+
+void printIPV4header(char* source, char* dest){
+
+		printf("******************************************************************************\n");
+		printf("Packet number: %d\n", packet_counter);
+		printf(" IP version: IPv4\n");
+
+		printf("	Source IP: %s\n", source);
+		printf("	Destination IP: %s\n", dest);
+}
+
+/* Convert and Print Data from protocols 
+ * 	(PrintData Adapted from BinaryTides, "http://www.binarytides.com/packet-sniffer-code-c-libpcap-linux-sockets/"
+ * 	written by Silver Moon)
+ */
+void PrintData (const u_char * data , int Size)
+{
+	int i , j;
+	for(i=0 ; i < Size ; i++)
+	{
+		if( i!=0 && i%16==0)   //if one line of hex printing is complete...
+		{
+			printf("         ");
+			for(j=i-16 ; j<i ; j++)
+			{
+				if(data[j]>=32 && data[j]<=128)
+					printf("%c",(unsigned char)data[j]); //if its a number or alphabet
+
+				else printf("."); //otherwise print a dot
+			}
+			printf("\n");
+		} 
+
+		if(i%16==0) printf("   ");
+		printf(" %02X",(unsigned int)data[i]);
+
+		if( i==Size-1)  //print the last spaces
+		{
+			for(j=0;j<15-i%16;j++) 
+			{
+				printf("   "); //extra spaces
+			}
+
+			printf("         ");
+
+			for(j=i-i%16 ; j<=i ; j++)
+			{
+				if(data[j]>=32 && data[j]<=128) 
+				{
+					printf("%c",(unsigned char)data[j]);
+				}
+				else
+				{
+					printf(".");
+				}
+			}
+			printf("\n\n" );
+		}
+	}
+}

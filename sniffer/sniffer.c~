@@ -153,24 +153,7 @@ void get_cmd(char *command){
 		get_sub_cmd(i,cmd[i][0]);
 	}
 }
-void print_cmd(){
-	int i,j;
-	for(i=0;i<cmd_total;++i){
-		j=0;
-		while(cmd[i][j]!=NULL){
-			printf("%s\t",cmd[i][j]);
-			++j;
-		}
-		printf("\n");
-	}
-}
-void set_cmd(){
-	int i;
-	for(i=0;i<cmd_total;++i){
-		cmd[i][0]=NULL;
-	}
-	cmd_total=0;
-}
+
 int main(int argc,char *argv[]){
 	//错误信息
 	char err_buf[PCAP_ERRBUF_SIZE],device_name[256];

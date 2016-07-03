@@ -1,12 +1,17 @@
 #include <stdio.h>
 #include <unistd.h>
-#include <stdlib.h>
 #include <string.h>
-#include <errno.h>
+#include <stdlib.h>
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <sys/time.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <string.h>
+#define MAX 256
  
 //端口扫描程序TCP（多线程实现）
 #define DEBUG 1
@@ -112,6 +117,8 @@ int main(int argc, char **argv) {
         }
  
         if(strcmp("-a",argv[i])== 0){
+	
+		
             if(inet_aton(argv[i+1],&dest_ip) == 0){//把字符串点分ip地址转换成网络ip地址
                 printf("Usage:Ivalid dest ip\n");
                 exit(-1);
@@ -148,9 +155,11 @@ int main(int argc, char **argv) {
     if(thread == NULL){
         my_err("malloc thread",__LINE__);
     }
+    
     //创建线程，根据最大端口号和线程数分配每个线程扫描的端口区间
     for(i = 0;i <thread_num;i++){
         Port port;
+	
         port.dest_ip = dest_ip;  //可以直接赋值
         //printf("ip = %s\n",inet_ntoa(port.dest_ip));
         port.min_port = i*port_len+1; //最小端口号从1开始

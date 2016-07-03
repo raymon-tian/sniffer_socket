@@ -299,64 +299,6 @@ void scan_host_by_ip(char *argv[]){
 	pthread_create(&pthread,NULL,scanner1,(void *)&des);
 	pthread_join(pthread,NULL);
 }
-
-#define MAX 255
-
-char *cmd[MAX][MAX];
-int cmd_total;
-
-void get_sub_cmd(int loc,char *command){
-	char *p;
-	char sub[] = " ";
-	int i = 0;
-	p = strtok(command,sub);
-	if(p!=NULL){
-		cmd[loc][0] = p;
-		++i;
-	}
-	while((p=strtok(NULL,sub))){
-		cmd[loc][i] = p;
-		++i;
-	}
-	cmd[loc][i] = NULL;
-}
-void get_cmd(char *command){
-	char *p;
-	char sub[] = "|";
-	cmd_total = 0;
-	p = strtok(command,sub);
-	if(p!=NULL){
-		cmd[0][0]=p;
-		++cmd_total;
-	}
-	while((p=strtok(NULL,sub))){
-		cmd[cmd_total][0]=p;
-		++cmd_total;
-	}
-	int i;
-	cmd[cmd_total][0]=NULL;
-	for(i=0;i<cmd_total;++i){
-		get_sub_cmd(i,cmd[i][0]);
-	}
-}
-void print_cmd(){
-	int i,j;
-	for(i=0;i<cmd_total;++i){
-		j=0;
-		while(cmd[i][j]!=NULL){
-			printf("%s\t",cmd[i][j]);
-			++j;
-		}
-		printf("\n");
-	}
-}
-void set_cmd(){
-	int i;
-	for(i=0;i<cmd_total;++i){
-		cmd[i][0]=NULL;
-	}
-	cmd_total=0;
-}
 //界面展示
 void display(){
 	printf("   *********************************************************************************\n");
